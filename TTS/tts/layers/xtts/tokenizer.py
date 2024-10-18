@@ -33,37 +33,41 @@ def get_spacy_lang(lang):
 
 
 def split_sentence(text, lang, text_split_length=250):
-    """Preprocess the input text"""
+    """Preprocess the input text and group sentences without exceeding the text_split_length"""
     text_splits = []
     if text_split_length is not None and len(text) >= text_split_length:
-        text_splits.append("")
+        text_splits.append("")  # Start with an empty string for the first split
         nlp = get_spacy_lang(lang)
         nlp.add_pipe("sentencizer")
         doc = nlp(text)
-        for sentence in doc.sents:
-            if len(text_splits[-1]) + len(str(sentence)) <= text_split_length:
-                # if the last sentence + the current sentence is less than the text_split_length
-                # then add the current sentence to the last sentence
-                text_splits[-1] += " " + str(sentence)
-                text_splits[-1] = text_splits[-1].lstrip()
-            elif len(str(sentence)) > text_split_length:
-                # if the current sentence is greater than the text_split_length
-                for line in textwrap.wrap(
-                    str(sentence),
-                    width=text_split_length,
-                    drop_whitespace=True,
-                    break_on_hyphens=False,
-                    tabsize=1,
-                ):
-                    text_splits.append(str(line))
-            else:
-                text_splits.append(str(sentence))
 
-        if len(text_splits) > 1:
-            if text_splits[0] == "":
-                del text_splits[0]
+        current_group = ""  # To hold the current group of sentences
+
+        for sentence in doc.sents:
+            sentence_str = str(sentence).strip()  # Remove leading/trailing spaces
+
+            # Check if adding the current sentence exceeds the text_split_length
+            if len(current_group) + len(sentence_str) + 1 <= text_split_length:
+                # Add to the current group if it doesn't exceed the limit
+                if current_group:
+                    current_group += " "  # Add a space between sentences
+                current_group += sentence_str
+            else:
+                # Save the current group and start a new one
+                text_splits.append(current_group)
+                current_group = sentence_str  # Start with the new sentence
+
+        # Append the last group if not empty
+        if current_group:
+            text_splits.append(current_group)
+
+        # Remove the initial empty string if it's there
+        if len(text_splits) > 1 and text_splits[0] == "":
+            del text_splits[0]
+
     else:
-        text_splits = [text.lstrip()]
+        # If text is smaller than the split length, just return the text as is
+        text_splits = [text.strip()]
 
     return text_splits
 
