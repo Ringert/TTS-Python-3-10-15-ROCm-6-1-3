@@ -233,7 +233,35 @@ class Synthesizer(nn.Module):
         Returns:
             List[str]: list of sentences.
         """
-        return self.seg.segment(text)
+        segments = self.seg.segment(text);
+
+        i = 0
+        while i < len(segments):
+            if len(segments[i]) >= 80:
+                i += 1
+                continue
+
+            # Decide merge direction
+            if i == 0:
+                # Only merge forward
+                segments[i + 1] = segments[i] + " " + segments[i + 1]
+                del segments[i]
+            elif i == len(segments) - 1:
+                # Only merge backward
+                segments[i - 1] += " " + segments[i]
+                del segments[i]
+                i -= 1
+            else:
+                # Merge with the shorter neighbor
+                if len(segments[i - 1]) <= len(segments[i + 1]):
+                    segments[i - 1] += " " + segments[i]
+                    del segments[i]
+                    i -= 1
+                else:
+                    segments[i + 1] = segments[i] + " " + segments[i + 1]
+                    del segments[i]
+
+        return segments;
 
     def save_wav(self, wav: List[int], path: str, pipe_out=None) -> None:
         """Save the waveform as a file.
@@ -294,7 +322,6 @@ class Synthesizer(nn.Module):
         if text:
             sens = [text]
             if split_sentences:
-                print(" > Text splitted to sentences.")
                 sens = self.split_into_sentences(text)
             print(sens)
 
