@@ -364,10 +364,6 @@ class ModelManager(object):
         with fsspec.open(remote_url, "r", encoding="utf-8") as f:
             config_remote = json.load(f)
 
-        if not config_local == config_remote:
-            print(f" > {model_name} is already downloaded however it has been changed. Redownloading it...")
-            self.create_dir_and_download_model(model_name, model_item, output_path)
-
     def download_model(self, model_name):
         """Download model files given the full model name.
         Model name is in the format
