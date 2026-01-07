@@ -237,7 +237,7 @@ class Synthesizer(nn.Module):
 
         i = 0
         while i < len(segments):
-            if len(segments[i]) >= 80:
+            if len(segments[i]) >= 125:
                 i += 1
                 continue
 
