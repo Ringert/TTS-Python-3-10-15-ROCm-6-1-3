@@ -1,5 +1,5 @@
-black
-coverage
-isort
-nose2
-pylint>=2.17.0  # >=2.17.0 required for Python 3.12 support
+black>=24.1.0
+coverage>=7.4.0
+isort>=5.13.0
+nose2>=0.15.1
+pylint>=3.0.0

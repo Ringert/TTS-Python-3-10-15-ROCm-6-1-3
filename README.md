@@ -144,7 +144,20 @@ Underlined "TTS*" and "Judy*" are **internal** 🐸TTS models that are not relea
 You can also help us implement more models.
 
 ## Installation
-🐸TTS is tested on Ubuntu 18.04 with **python >= 3.9, < 3.12.**.
+🐸TTS is tested on Ubuntu 24.04 with **python >= 3.9, < 3.13.**.
+
+### Prerequisites - Install lib-trainer
+
+Before installing TTS, you must first install **lib-trainer**, which is a required dependency for model training and configuration:
+
+```bash
+git clone https://github.com/Ringert/lib-trainer.git
+cd lib-trainer
+make install
+cd ..
+```
+
+### Install TTS
 
 If you are only interested in [synthesizing speech](https://tts.readthedocs.io/en/latest/inference.html) with the released 🐸TTS models, installing from PyPI is the easiest option.
 

@@ -1,1 +1,3 @@
-bokeh>=3.3.0  # >=3.3.0 required for Python 3.12 support
+bokeh>=3.4.0
+jupyter>=1.0.0
+ipython>=8.20.0
