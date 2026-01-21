@@ -171,7 +171,13 @@ class GPT2InferenceModel(GPT2PreTrainedModel):
         
         # Extract generation parameters with sensible defaults
         # Similar to XTTS defaults for consistency
-        max_new_tokens = kwargs.get('max_new_tokens', 200)
+        
+        # Calculate max_new_tokens dynamically based on text length
+        # Heuristic: ~6-8 audio tokens per text token, but at least 50 and max 400
+        text_len = input_ids.shape[-1]
+        default_max_new = max(50, min(400, text_len * 8))
+        
+        max_new_tokens = kwargs.get('max_new_tokens', default_max_new)
         max_length = kwargs.get('max_length', 400)
         do_sample = kwargs.get('do_sample', True)
         top_p = kwargs.get('top_p', 0.85)
@@ -180,6 +186,7 @@ class GPT2InferenceModel(GPT2PreTrainedModel):
         num_beams = kwargs.get('num_beams', 1)
         repetition_penalty = kwargs.get('repetition_penalty', 10.0)
         length_penalty = kwargs.get('length_penalty', 1.0)
+        eos_token_id = kwargs.get('eos_token_id', None)
         
         # Calculate remaining tokens to generate
         remaining_tokens = min(max_new_tokens, max_length - input_ids.shape[-1])
@@ -264,6 +271,10 @@ class GPT2InferenceModel(GPT2PreTrainedModel):
                     [attention_mask, torch.ones((batch_size, 1), device=device, dtype=torch.long)],
                     dim=-1
                 )
+                
+                # Check for end of sequence token (stop condition)
+                if eos_token_id is not None and (next_token == eos_token_id).all():
+                    break
         
         return sequence
 
