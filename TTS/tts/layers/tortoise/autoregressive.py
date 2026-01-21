@@ -4,7 +4,7 @@ import functools
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from transformers import GPT2Config, GPT2PreTrainedModel, LogitsProcessorList
+from transformers import GPT2Config, GPT2PreTrainedModel, LogitsProcessorList, GenerationMixin
 from transformers.modeling_outputs import CausalLMOutputWithCrossAttentions
 
 from TTS.tts.layers.tortoise.arch_utils import AttentionBlock, TypicalLogitsWarper
@@ -147,17 +147,125 @@ class GPT2InferenceModel(GPT2PreTrainedModel):
             cross_attentions=transformer_outputs.cross_attentions,
         )
 
-    @staticmethod
-    def _reorder_cache(past, beam_idx):
+    def generate(self, *args, **kwargs):
+        """Custom generate compatible with Tortoise prefix conditioning.
+        
+        Handles both Tortoise API and standard transformers API.
+        Uses default parameters for quality generation.
         """
-        This function is used to re-order the :obj:`past_key_values` cache if
-        :meth:`~transformers.PreTrainedModel.beam_search` or :meth:`~transformers.PreTrainedModel.beam_sample` is
-        called. This is required to match :obj:`past_key_values` with the correct beam_idx at every generation step.
-        """
-        return tuple(
-            tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past)
-            for layer_past in past
-        )
+        # Extract input_ids (first positional argument or from kwargs)
+        if len(args) > 0:
+            input_ids = args[0]
+        else:
+            input_ids = kwargs.get('input_ids', None)
+        
+        # Ensure input_ids is a tensor
+        if not isinstance(input_ids, torch.Tensor):
+            input_ids = torch.tensor(input_ids, dtype=torch.long)
+        
+        # Get device from model parameters
+        device = next(self.parameters()).device
+        input_ids = input_ids.to(device)
+        
+        batch_size = input_ids.shape[0]
+        
+        # Extract generation parameters with sensible defaults
+        # Similar to XTTS defaults for consistency
+        max_new_tokens = kwargs.get('max_new_tokens', 200)
+        max_length = kwargs.get('max_length', 400)
+        do_sample = kwargs.get('do_sample', True)
+        top_p = kwargs.get('top_p', 0.85)
+        top_k = kwargs.get('top_k', 50)
+        temperature = kwargs.get('temperature', 0.75)
+        num_beams = kwargs.get('num_beams', 1)
+        repetition_penalty = kwargs.get('repetition_penalty', 10.0)
+        length_penalty = kwargs.get('length_penalty', 1.0)
+        
+        # Calculate remaining tokens to generate
+        remaining_tokens = min(max_new_tokens, max_length - input_ids.shape[-1])
+        
+        # Initialize sequence and attention mask
+        sequence = input_ids.clone()
+        attention_mask = torch.ones_like(sequence, dtype=torch.long)
+        past_key_values = None
+        
+        with torch.no_grad():
+            for step in range(remaining_tokens):
+                # Prepare inputs using the model's prepare_inputs_for_generation
+                model_inputs = self.prepare_inputs_for_generation(
+                    sequence,
+                    past_key_values=past_key_values,
+                    attention_mask=attention_mask,
+                    use_cache=True,
+                )
+                
+                # Forward pass
+                outputs = self(
+                    input_ids=model_inputs['input_ids'],
+                    past_key_values=model_inputs['past_key_values'],
+                    attention_mask=model_inputs['attention_mask'],
+                    position_ids=model_inputs['position_ids'],
+                    use_cache=True,
+                    return_dict=True,
+                )
+                
+                past_key_values = outputs.past_key_values
+                
+                # Get logits for next token
+                logits = outputs.logits[:, -1, :]
+                
+                # Apply repetition penalty (penalize tokens already in sequence)
+                if repetition_penalty != 1.0:
+                    for i in range(batch_size):
+                        for token_id in torch.unique(sequence[i]):
+                            logits[i, token_id] /= repetition_penalty
+                
+                # Apply temperature
+                if temperature != 1.0:
+                    logits = logits / temperature
+                
+                # Sample next token
+                if do_sample:
+                    # Top-p (nucleus) sampling
+                    if top_p < 1.0:
+                        sorted_logits, sorted_indices = torch.sort(logits, descending=True, dim=-1)
+                        cum_probs = torch.cumsum(torch.softmax(sorted_logits, dim=-1), dim=-1)
+                        mask = cum_probs <= top_p
+                        mask[..., 0] = True  # Always keep top token
+                        sorted_logits_masked = sorted_logits.clone()
+                        sorted_logits_masked[~mask] = -float('inf')
+                        logits_masked = torch.full_like(logits, -float('inf'))
+                        logits_masked.scatter_(1, sorted_indices, sorted_logits_masked)
+                        logits = logits_masked
+                    
+                    # Top-k sampling
+                    if top_k > 0:
+                        top_k_val = min(top_k, logits.shape[-1])
+                        top_k_logits, top_k_indices = torch.topk(logits, top_k_val, dim=-1)
+                        min_logits = top_k_logits[..., -1:]
+                        logits = torch.where(
+                            logits < min_logits,
+                            torch.full_like(logits, -float('inf')),
+                            logits
+                        )
+                    
+                    # Sample from distribution
+                    probs = torch.softmax(logits, dim=-1)
+                    next_token = torch.multinomial(probs, num_samples=1)
+                else:
+                    # Greedy decoding
+                    next_token = torch.argmax(logits, dim=-1, keepdim=True)
+                
+                # Append to sequence
+                sequence = torch.cat([sequence, next_token], dim=-1)
+                
+                # Update attention mask
+                attention_mask = torch.cat(
+                    [attention_mask, torch.ones((batch_size, 1), device=device, dtype=torch.long)],
+                    dim=-1
+                )
+        
+        return sequence
 
 
 class ConditioningEncoder(nn.Module):

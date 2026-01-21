@@ -243,9 +243,13 @@ class Synthesizer(nn.Module):
 
             # Decide merge direction
             if i == 0:
-                # Only merge forward
-                segments[i + 1] = segments[i] + " " + segments[i + 1]
-                del segments[i]
+                # Only merge forward if there's a next segment
+                if i + 1 < len(segments):
+                    segments[i + 1] = segments[i] + " " + segments[i + 1]
+                    del segments[i]
+                else:
+                    # No next segment, just move forward
+                    i += 1
             elif i == len(segments) - 1:
                 # Only merge backward
                 segments[i - 1] += " " + segments[i]
