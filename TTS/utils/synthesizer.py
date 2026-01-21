@@ -233,11 +233,11 @@ class Synthesizer(nn.Module):
         Returns:
             List[str]: list of sentences.
         """
-        segments = self.seg.segment(text);
+        segments = self.seg.segment(text)
 
         i = 0
         while i < len(segments):
-            if len(segments[i]) >= 125:
+            if len(segments[i]) < 125:
                 i += 1
                 continue
 
@@ -265,7 +265,7 @@ class Synthesizer(nn.Module):
                     segments[i + 1] = segments[i] + " " + segments[i + 1]
                     del segments[i]
 
-        return segments;
+        return segments
 
     def save_wav(self, wav: List[int], path: str, pipe_out=None) -> None:
         """Save the waveform as a file.
