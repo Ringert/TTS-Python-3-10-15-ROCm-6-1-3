@@ -225,47 +225,105 @@ class Synthesizer(nn.Module):
             self.vocoder_model.cuda()
 
     def split_into_sentences(self, text) -> List[str]:
-        """Split give text into sentences.
+        """Split text into sentences with optimized balancing.
 
         Args:
             text (str): input text in string format.
 
         Returns:
-            List[str]: list of sentences.
+            List[str]: list of sentences with balanced lengths (target: similar sizes, max 255 chars).
         """
         segments = self.seg.segment(text)
-
+        
+        # Constants for optimization
+        MIN_LENGTH_TO_MERGE = 60  # Merge segments shorter than this
+        MAX_LENGTH = 255  # Maximum length per segment
+        
         i = 0
         while i < len(segments):
-            if len(segments[i]) < 125:
+            current_len = len(segments[i])
+            
+            # Skip if segment is acceptable length
+            if current_len >= MIN_LENGTH_TO_MERGE and current_len <= MAX_LENGTH:
                 i += 1
                 continue
-
-            # Decide merge direction
-            if i == 0:
-                # Only merge forward if there's a next segment
-                if i + 1 < len(segments):
-                    segments[i + 1] = segments[i] + " " + segments[i + 1]
-                    del segments[i]
-                else:
-                    # No next segment, just move forward
-                    i += 1
-            elif i == len(segments) - 1:
-                # Only merge backward
-                segments[i - 1] += " " + segments[i]
-                del segments[i]
-                i -= 1
-            else:
-                # Merge with the shorter neighbor
-                if len(segments[i - 1]) <= len(segments[i + 1]):
+            
+            # Merge if too short (< 40 chars)
+            if current_len < MIN_LENGTH_TO_MERGE:
+                if i == 0:
+                    # First segment: merge with next if available
+                    if i + 1 < len(segments):
+                        segments[i + 1] = segments[i] + " " + segments[i + 1]
+                        del segments[i]
+                    else:
+                        i += 1
+                elif i == len(segments) - 1:
+                    # Last segment: merge with previous
                     segments[i - 1] += " " + segments[i]
                     del segments[i]
                     i -= 1
                 else:
-                    segments[i + 1] = segments[i] + " " + segments[i + 1]
-                    del segments[i]
-
+                    # Middle segment: merge with shorter neighbor
+                    prev_len = len(segments[i - 1])
+                    next_len = len(segments[i + 1])
+                    
+                    # Try merging with neighbor that results in best balance
+                    if prev_len <= next_len:
+                        segments[i - 1] += " " + segments[i]
+                        del segments[i]
+                        i -= 1
+                    else:
+                        segments[i + 1] = segments[i] + " " + segments[i + 1]
+                        del segments[i]
+            
+            # Merge if too long (> 255 chars) - this shouldn't happen with source segments
+            # but handle just in case
+            elif current_len > MAX_LENGTH:
+                i += 1
+            else:
+                i += 1
+        
+        # Final pass: balance segments to be more similar in length
+        segments = self._balance_segments(segments, MAX_LENGTH)
+        
         return segments
+    
+    def _balance_segments(self, segments: List[str], max_length: int) -> List[str]:
+        """Balance segment lengths for optimal audio generation.
+        
+        Args:
+            segments: List of text segments
+            max_length: Maximum allowed segment length
+            
+        Returns:
+            List[str]: balanced segments
+        """
+        if len(segments) <= 1:
+            return segments
+        
+        # Calculate target length
+        total_length = sum(len(s) for s in segments)
+        target_length = total_length / len(segments)
+        
+        balanced = []
+        i = 0
+        
+        while i < len(segments):
+            current = segments[i]
+            current_len = len(current)
+            
+            # Try to merge with next segment if current is significantly shorter than target
+            while (i + 1 < len(segments) and 
+                   current_len < target_length * 0.6 and 
+                   current_len + len(segments[i + 1]) + 1 <= max_length):
+                current += " " + segments[i + 1]
+                current_len = len(current)
+                i += 1
+            
+            balanced.append(current)
+            i += 1
+        
+        return balanced
 
     def save_wav(self, wav: List[int], path: str, pipe_out=None) -> None:
         """Save the waveform as a file.
