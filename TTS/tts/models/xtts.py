@@ -427,14 +427,14 @@ class Xtts(BaseTTS):
         # GPT inference
         temperature=0.75,
         length_penalty=1.0,
-        repetition_penalty=10.0,
+        repetition_penalty=5.0,
         top_k=50,
         top_p=0.85,
         do_sample=True,
         # Cloning
         gpt_cond_len=30,
-        gpt_cond_chunk_len=6,
-        max_ref_len=10,
+        gpt_cond_chunk_len=4,
+        max_ref_len=30,
         sound_norm_refs=False,
         **hf_generate_kwargs,
     ):
@@ -509,7 +509,7 @@ class Xtts(BaseTTS):
         # GPT inference
         temperature=0.75,
         length_penalty=1.0,
-        repetition_penalty=10.0,
+        repetition_penalty=5.0,
         top_k=50,
         top_p=0.85,
         do_sample=True,
@@ -620,7 +620,7 @@ class Xtts(BaseTTS):
         # GPT inference
         temperature=0.75,
         length_penalty=1.0,
-        repetition_penalty=10.0,
+        repetition_penalty=5.0,
         top_k=50,
         top_p=0.85,
         do_sample=True,

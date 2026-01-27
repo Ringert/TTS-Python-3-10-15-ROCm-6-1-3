@@ -171,7 +171,7 @@ class GPT2InferenceModel(GPT2PreTrainedModel):
         top_k = kwargs.get('top_k', 50)
         temperature = kwargs.get('temperature', 0.75)
         num_beams = kwargs.get('num_beams', 1)
-        repetition_penalty = kwargs.get('repetition_penalty', 10.0)
+        repetition_penalty = kwargs.get('repetition_penalty', 5.0)
         length_penalty = kwargs.get('length_penalty', 1.0)
         eos_token_id = kwargs.get('eos_token_id', None)
         
